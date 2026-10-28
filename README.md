@@ -72,7 +72,7 @@ The first time Rondel converts something in Desktop, Documents or Downloads, mac
 
 ## Status
 
-Done: the wheel, conversion to all seven formats with ffmpeg and five without, the Finder service, Open With, the command line, install and uninstall, and the tests. CI runs the tests on Apple Silicon, builds the app and converts a file with it.
+Done: the wheel, conversion to all seven formats with ffmpeg and five without, the Finder service, Open With, the command line, install and uninstall, and the tests. CI runs the tests on Apple Silicon, builds the app, checks with `pbs -read_bundle` that Finder can read its service, and converts a file with it.
 
 Not done: there are no settings, so the bitrates above are fixed, and there's no signed download, so you build it yourself. The full list is at the end, along with what I haven't been able to check.
 
@@ -92,7 +92,11 @@ An app opened from Finder gets a PATH without Homebrew on it, so ffmpeg is looke
 
 Each conversion writes to a hidden file in the same folder, such as `.song.1a2b3c4d.rondel.mp3`, and renames it into place only once the encoder has finished. A failure or a cancel deletes the hidden file, so a half-written file never appears under a real name.
 
-The rename uses `renamex_np` with `RENAME_EXCL`, which refuses to replace an existing file and does it in one step. Two conversions finishing at the same moment can't both take `song.mp3`: the loser gets `song 2.mp3`. Some external drives (exFAT, SMB shares) don't support that flag. On those it checks first and then moves, which leaves a small gap a second writer could slip into.
+The rename uses `renamex_np` with `RENAME_EXCL`, which refuses to replace an existing file and does it in one step. Two conversions finishing at the same moment can't both take `song.mp3`: the loser gets `song 2.mp3`. exFAT drives don't support that flag, and some network shares may not either. On those, the name is claimed first by creating it with `O_EXCL`, which is just as atomic, and the finished file is then renamed over the empty claim.
+
+### Several at once
+
+A batch runs as many conversions at once as the Mac has cores. On this laptop (Intel i5-8259U, 8 threads), 200 twenty-second WAVs became MP3s in 18.5 s.
 
 ### Keeping the bit depth
 
@@ -112,10 +116,12 @@ Most of these came from breaking something on purpose to see whether a test woul
 - My first cancel test passed even after I deleted the line that kills the encoder. The batch still came back "cancelled", just a few seconds later, once the encoder had finished on its own. The test now uses a five-minute file and checks the batch returns within a second of the cancel. For scale, a full three-minute encode took 2.1 s for MP3 and 3.6 s for AAC on this laptop. Later the same test failed by 20 ms when the whole suite ran at once: `terminate()` sends SIGTERM, and ffmpeg takes a moment to finish off a file that's about to be deleted anyway. A cancel sends SIGKILL now. Then the first CI run on Apple Silicon failed it from the other side: the thread meant to send the cancel wasn't scheduled until the encode had finished, because every test was running at once on three cores. The batch now runs on its own thread while the test's thread watches it.
 - With that fixed, it still passed after I deleted the cleanup of half-written files. The cancel landed before the encoder had created its output, so there was nothing to clean up. The test now waits until the hidden file exists before cancelling.
 - A file name close to macOS's 255-byte limit broke once the hidden file's suffix was added. The temporary name now uses a shortened stem.
+- The exFAT fallback used to check that a name was free and then move the file there. I mounted an exFAT disk image and converted four files called `song` at once, and that version failed five runs out of five: some runs reported a spurious error, and in others two conversions ended up with the same name, so one file was silently lost. Claiming the name with `O_EXCL` fixed it, and the test now mounts an exFAT image every run.
+- An empty file, which is what a failed download often leaves, came back with ffmpeg's "Invalid data found when processing input". It now says the file doesn't look like audio or is damaged, with ffmpeg's words after that.
 
 ## What's tested
 
-There are 40 tests, run with `swift test`, plus one that only draws the wheel to PNG files for a person to look at, when `RONDEL_SNAPSHOTS` names a folder. The test audio is generated as they run: sine tones written with Core Audio, and speech from the Mac's `say` command.
+There are 42 tests, run with `swift test`, plus one that only draws the wheel to PNG files for a person to look at, when `RONDEL_SNAPSHOTS` names a folder. The test audio is generated as they run: sine tones written with Core Audio, and speech from the Mac's `say` command.
 
 - `FormatTests` covers output names, which slices are greyed out and why, and the wheel's geometry: which slice is under a point, going clockwise from twelve o'clock, and the dead zones in the middle and outside the ring.
 - `ConverterTests` runs the real tools on real files, once with Core Audio only and once with ffmpeg if it's installed. It checks that:
@@ -124,7 +130,8 @@ There are 40 tests, run with `swift test`, plus one that only draws the wheel to
   - the original is byte-for-byte unchanged;
   - an existing file is never overwritten;
   - files already in the format are skipped, including AAC and ALAC sharing `.m4a`;
-  - files that aren't audio, missing files and read-only folders fail with a clear message and leave nothing behind;
+  - files that aren't audio, empty files, missing files and read-only folders fail with a clear message and leave nothing behind;
+  - on an exFAT disk image, four files with the same name all convert to names of their own;
   - awkward names convert: a leading dash, quotes, `&`, accents, and a name near the length limit;
   - a cancel kills a running encoder and deletes its partial output;
   - with ffmpeg, tags and cover art come across, 5.1 surround becomes stereo for MP3, and a Matroska file that Core Audio can't open still converts.
@@ -133,9 +140,9 @@ There are 40 tests, run with `swift test`, plus one that only draws the wheel to
 
 ### Not checked
 
-- I haven't clicked Convert Audio… in Finder myself. I built and tested the app without installing it, and macOS won't let a script click a window without Accessibility permission. What is checked: `pbs -read_bundle` reads the service from the built app, the app opens the wheel at the pointer when it's given files, and in the tests everything from the click onwards works.
+- Nobody has clicked a slice of the real wheel yet: macOS won't let a script click a window without Accessibility permission. What is checked, on the installed app: calling Convert Audio… through the system's services, the way Finder does, launches the app and opens the wheel at the pointer; Open With opens it too; and opening the app by itself shows the file picker. The tests cover everything from the click onwards.
 - The folder-access prompt for Desktop, Documents and Downloads hasn't been seen, for the same reason.
-- `renamex_np` falling back on exFAT and SMB drives hasn't been run.
+- SMB shares haven't been tried. exFAT and FAT32 disk images have.
 - Built and run on macOS 15.7 on an Intel Mac, and tested on Apple Silicon in CI. Not tried on macOS 13 or 14.
 
 ## Not done
