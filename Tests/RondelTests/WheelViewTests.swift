@@ -155,6 +155,10 @@ func snapshots() throws {
     states[3].1.view.state = .converting(.mp3, done: 1, total: 3)
     states[4].1.view.state = .finished(ok: true, message: "3 converted\n1 already MP3")
     for (name, harness) in states {
-        try harness.render().representation(using: .png, properties: [:])!.write(to: folder.appendingPathComponent("\(name).png"))
+        for (look, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            harness.view.appearance = NSAppearance(named: appearance)
+            try harness.render().representation(using: .png, properties: [:])!
+                .write(to: folder.appendingPathComponent("\(name)-\(look).png"))
+        }
     }
 }
