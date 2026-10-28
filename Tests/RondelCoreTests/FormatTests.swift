@@ -61,3 +61,28 @@ let wheel = Wheel(slices: Format.allCases.count, inner: 50, outer: 140)
     #expect(abs(point.x) < 0.001)
     #expect(abs(point.y - 95) < 0.001)
 }
+
+@Test func slicesThatCantBePickedSayWhy() {
+    let wavs = [URL(fileURLWithPath: "/a.wav"), URL(fileURLWithPath: "/b.WAV")]
+    let withFFmpeg = Tools(ffmpeg: URL(fileURLWithPath: "/usr/local/bin/ffmpeg"))
+    #expect(reasonUnavailable(.wav, files: wavs, tools: withFFmpeg) == "They're all WAV already")
+    #expect(reasonUnavailable(.wav, files: [wavs[0]], tools: withFFmpeg) == "It's already WAV")
+    #expect(reasonUnavailable(.flac, files: wavs, tools: withFFmpeg) == nil)
+    #expect(reasonUnavailable(.mp3, files: wavs, tools: withFFmpeg) == nil)
+    #expect(reasonUnavailable(.mp3, files: wavs, tools: Tools(ffmpeg: nil))?.contains("brew install ffmpeg") == true)
+}
+
+@Test func aMixOfFormatsLeavesEverySliceOpen() {
+    // Converting a WAV and an MP3 to MP3 is reasonable: the MP3 is skipped.
+    let mixed = [URL(fileURLWithPath: "/a.wav"), URL(fileURLWithPath: "/b.mp3")]
+    let withFFmpeg = Tools(ffmpeg: URL(fileURLWithPath: "/usr/local/bin/ffmpeg"))
+    #expect(Format.allCases.allSatisfy { reasonUnavailable($0, files: mixed, tools: withFFmpeg) == nil })
+}
+
+@Test func m4aNeverRulesOutAACOrALAC() {
+    // Telling AAC from ALAC means opening the file, which the wheel doesn't
+    // wait for. The converter skips a true match later.
+    let m4a = [URL(fileURLWithPath: "/a.m4a")]
+    #expect(reasonUnavailable(.aac, files: m4a, tools: Tools(ffmpeg: nil)) == nil)
+    #expect(reasonUnavailable(.alac, files: m4a, tools: Tools(ffmpeg: nil)) == nil)
+}

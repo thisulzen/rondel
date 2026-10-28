@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import RondelCore
 
 let usage = """
@@ -43,8 +43,16 @@ func commandLine(_ arguments: [String]) -> Int32 {
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
-if arguments.first == "--help" || arguments.first == "-h" {
+switch arguments.first {
+case "--help", "-h":
     print(usage, terminator: "")
-    exit(0)
+case "--to":
+    exit(commandLine(arguments))
+default:
+    let delegate = AppDelegate()
+    NSApplication.shared.delegate = delegate
+    // Info.plist's LSUIElement does this for the app bundle; this covers
+    // running the bare binary from a terminal.
+    NSApplication.shared.setActivationPolicy(.accessory)
+    NSApplication.shared.run()
 }
-exit(commandLine(arguments))

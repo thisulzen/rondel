@@ -65,3 +65,15 @@ public func outputName(for source: URL, format: Format, attempt: Int) -> String 
     let stem = source.deletingPathExtension().lastPathComponent
     return attempt == 1 ? "\(stem).\(format.fileExtension)" : "\(stem) \(attempt).\(format.fileExtension)"
 }
+
+/// Why a slice of the wheel can't be picked for these files, or nil if it
+/// can. Unavailable slices still show, greyed out, so the reason can be read.
+public func reasonUnavailable(_ format: Format, files: [URL], tools: Tools) -> String? {
+    if format.needsFFmpeg && tools.ffmpeg == nil {
+        return "Needs ffmpeg:\nbrew install ffmpeg"
+    }
+    if !files.isEmpty && files.allSatisfy({ Format(fileExtension: $0.pathExtension) == format }) {
+        return files.count == 1 ? "It's already \(format.name)" : "They're all \(format.name) already"
+    }
+    return nil
+}
