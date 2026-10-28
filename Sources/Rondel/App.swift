@@ -49,14 +49,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func show(_ files: [URL]) {
         // A new right-click replaces a wheel nobody has used yet, but never
-        // one that's converting.
-        wheels.filter(\.isChoosing).forEach { $0.close() }
+        // one that's converting. The new wheel goes on the list first:
+        // closing the old one last would leave the list empty for a moment,
+        // and the app would quit.
+        let unused = wheels.filter(\.isChoosing)
         let wheel = WheelController(files: files, tools: Tools.find())
         wheel.onClose = { [weak self] closed in
             self?.wheels.removeAll { $0 === closed }
             self?.quitIfIdle()
         }
         wheels.append(wheel)
+        unused.forEach { $0.close() }
         wheel.show()
     }
 
@@ -91,6 +94,7 @@ final class WheelController: NSObject, NSWindowDelegate {
     private let panel: WheelPanel
     private var batch: Batch?
     private var outsideClicks: Any?
+    private var closed = false
 
     var isChoosing: Bool { if case .choosing = view.state { true } else { false } }
 
@@ -146,7 +150,11 @@ final class WheelController: NSObject, NSWindowDelegate {
         if isChoosing { close() }
     }
 
+    /// Safe to call more than once: a click can dismiss the wheel just as
+    /// the timer after a finished batch does.
     func close() {
+        guard !closed else { return }
+        closed = true
         if let outsideClicks { NSEvent.removeMonitor(outsideClicks) }
         outsideClicks = nil
         panel.orderOut(nil)
