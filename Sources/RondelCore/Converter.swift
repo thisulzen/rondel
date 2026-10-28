@@ -50,7 +50,7 @@ public struct Converter: Sendable {
         }
         if format.needsFFmpeg { throw ConversionError.needsFFmpeg(format) }
         guard let audio else { throw ConversionError.unreadable }
-        return (tools.afconvert, try afconvertArguments(source, audio, format, output))
+        return (Tools.afconvert, try afconvertArguments(source, audio, format, output))
     }
 
     func ffmpegArguments(_ source: URL, _ audio: Audio?, _ format: Format, _ output: URL) -> [String] {
@@ -188,11 +188,10 @@ public enum ConversionError: LocalizedError, Equatable, Sendable {
 /// Where the converter finds ffmpeg and afconvert.
 public struct Tools: Sendable, CustomStringConvertible {
     public var ffmpeg: URL?
-    public var afconvert: URL
+    public static let afconvert = URL(fileURLWithPath: "/usr/bin/afconvert")
 
-    public init(ffmpeg: URL?, afconvert: URL = URL(fileURLWithPath: "/usr/bin/afconvert")) {
+    public init(ffmpeg: URL?) {
         self.ffmpeg = ffmpeg
-        self.afconvert = afconvert
     }
 
     /// An app opened from Finder gets a bare PATH (/usr/bin:/bin:/usr/sbin:/sbin)

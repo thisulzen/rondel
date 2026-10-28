@@ -115,7 +115,7 @@ Most of these came from breaking something on purpose to see whether a test woul
 
 ## What's tested
 
-There are 40 tests, run with `swift test` or `make test`, plus one that only draws the wheel to PNG files for a person to look at, when `RONDEL_SNAPSHOTS` names a folder. The test audio is generated as they run: sine tones written with Core Audio, and speech from the Mac's `say` command.
+There are 40 tests, run with `swift test`, plus one that only draws the wheel to PNG files for a person to look at, when `RONDEL_SNAPSHOTS` names a folder. The test audio is generated as they run: sine tones written with Core Audio, and speech from the Mac's `say` command.
 
 - `FormatTests` covers output names, which slices are greyed out and why, and the wheel's geometry: which slice is under a point, going clockwise from twelve o'clock, and the dead zones in the middle and outside the ring.
 - `ConverterTests` runs the real tools on real files, once with Core Audio only and once with ffmpeg if it's installed. It checks that:
@@ -165,7 +165,7 @@ Sources/Rondel/
     WheelView.swift   Drawing, mouse, keyboard and VoiceOver
 Resources/            Info.plist and the icon
 scripts/icon.swift    Draws the icon (make icon)
-Makefile              app, install, uninstall, test
+Makefile              app, install, uninstall, icon
 ```
 
 ## References

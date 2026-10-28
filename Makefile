@@ -6,7 +6,7 @@ PREFIX ?= $(HOME)/Applications
 LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 PBS := /System/Library/CoreServices/pbs
 
-.PHONY: app install uninstall test icon clean
+.PHONY: app install uninstall icon clean
 
 # An ad-hoc signature is enough for an app built on the Mac it runs on.
 app:
@@ -33,9 +33,6 @@ uninstall:
 	rm -rf "$(PREFIX)/Rondel.app"
 	$(PBS) -update
 	@echo "Removed $(PREFIX)/Rondel.app"
-
-test:
-	swift test
 
 icon:
 	rm -rf build/Rondel.iconset
