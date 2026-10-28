@@ -21,6 +21,29 @@ func withFolder(_ body: (URL) throws -> Void) throws {
     try body(folder)
 }
 
+/// Mounts a small exFAT disk image out of Finder's sight for the length of
+/// the test.
+func withExFATVolume(_ body: (URL) throws -> Void) throws {
+    try withFolder { folder in
+        let image = folder.appendingPathComponent("drive.dmg")
+        let mountPoint = folder.appendingPathComponent("drive")
+        try FileManager.default.createDirectory(at: mountPoint, withIntermediateDirectories: true)
+        try hdiutil(["create", "-size", "64m", "-fs", "ExFAT", "-volname", "RondelTest", image.path])
+        try hdiutil(["attach", "-nobrowse", "-mountpoint", mountPoint.path, image.path])
+        defer { try? hdiutil(["detach", "-force", mountPoint.path]) }
+        try body(mountPoint)
+    }
+}
+
+func hdiutil(_ arguments: [String]) throws {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+    process.arguments = arguments + ["-quiet"]
+    try process.run()
+    process.waitUntilExit()
+    #expect(process.terminationStatus == 0, "hdiutil \(arguments[0]) failed")
+}
+
 /// Writes a 440 Hz sine with Core Audio, so the tests need nothing but a Mac.
 /// The extension picks the container.
 @discardableResult
@@ -223,6 +246,35 @@ func aVeryLongNameStillConverts(tools: Tools) throws {
         let source = try tone(name, in: folder)
         let output = try Converter(tools: tools).convert(source, to: .flac)
         #expect(output.lastPathComponent == String(repeating: "long name ", count: 24) + ".flac")
+    }
+}
+
+@Test(arguments: engines)
+func anEmptyFileSaysItsDamaged(tools: Tools) throws {
+    // What a failed download usually leaves behind.
+    try withFolder { folder in
+        let empty = folder.appendingPathComponent("download.mp3")
+        try Data().write(to: empty)
+        #expect {
+            try Converter(tools: tools).convert(empty, to: .wav)
+        } throws: { error in
+            let message = (error as? ConversionError)?.localizedDescription ?? ""
+            return message.contains("damaged") || message.contains("Core Audio can read")
+        }
+        #expect(try contents(of: folder) == ["download.mp3"])
+    }
+}
+
+@Test(arguments: engines)
+func onAnExFATDriveNamesStillNeverClash(tools: Tools) throws {
+    // exFAT can't do the one-step no-overwrite rename, so this runs the
+    // fallback. Four files called "song" finish together, and each has to
+    // land under a name of its own.
+    try withExFATVolume { volume in
+        let sources = try ["wav", "aif", "aiff", "caf"].map { try tone("song.\($0)", in: volume) }
+        let results = Batch(files: sources, format: .flac, converter: Converter(tools: tools)).run()
+        let outputs = try results.map { try $0.get().lastPathComponent }
+        #expect(Set(outputs) == ["song.flac", "song 2.flac", "song 3.flac", "song 4.flac"])
     }
 }
 

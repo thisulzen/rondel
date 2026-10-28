@@ -40,7 +40,13 @@ public struct Converter: Sendable {
         defer { try? FileManager.default.removeItem(at: temp) }
 
         let (tool, arguments) = try command(source, audio, format, temp)
-        try run(tool, arguments, cancellation)
+        do {
+            try run(tool, arguments, cancellation)
+        } catch ConversionError.toolFailed(let message) where audio == nil {
+            // Neither Core Audio nor ffmpeg could make sense of it: most often
+            // an empty or half-downloaded file. ffmpeg's own words go last.
+            throw ConversionError.toolFailed("It doesn't look like audio, or the file is damaged. (\(message))")
+        }
         return try moveIntoPlace(temp, source: source, format: format)
     }
 
@@ -138,16 +144,19 @@ public struct Converter: Sendable {
             case EEXIST:
                 continue
             case ENOTSUP, EINVAL:
-                // Some external drives (exFAT, SMB shares) don't support the
-                // flag. Checking first and then moving leaves a gap a second
-                // writer could slip into, but only on those drives.
-                if FileManager.default.fileExists(atPath: destination.path) { continue }
-                do {
-                    try FileManager.default.moveItem(at: temp, to: destination)
-                    return destination
-                } catch {
-                    throw ConversionError.toolFailed("Couldn't save the result: \(error.localizedDescription)")
+                // exFAT and some network shares don't support the flag.
+                // Creating the name with O_EXCL claims it just as atomically,
+                // and the plain rename then only replaces that empty claim.
+                let claim = open(destination.path, O_CREAT | O_EXCL | O_WRONLY, 0o644)
+                if claim < 0 {
+                    if errno == EEXIST { continue }
+                    throw ConversionError.toolFailed("Couldn't save the result: \(String(cString: strerror(errno))).")
                 }
+                close(claim)
+                if rename(temp.path, destination.path) == 0 { return destination }
+                let failure = errno
+                unlink(destination.path)
+                throw ConversionError.toolFailed("Couldn't save the result: \(String(cString: strerror(failure))).")
             default:
                 throw ConversionError.toolFailed("Couldn't save the result: \(String(cString: strerror(errno))).")
             }
