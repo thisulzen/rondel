@@ -257,25 +257,31 @@ func cancellingMidConversionLeavesNothingBehind(tools: Tools) throws {
         let source = try tone("long.wav", in: folder, seconds: 300)
         let format: Format = tools.ffmpeg == nil ? .aac : .mp3
         let batch = Batch(files: [source], format: format, converter: Converter(tools: tools))
+        // The batch gets a thread of its own, and this thread, already
+        // running, watches for it. Watching from a GCD block instead failed
+        // in CI: with every test running at once the block wasn't scheduled
+        // until the encode had finished, so there was nothing left to cancel.
+        var results: [Result<URL, ConversionError>] = []
+        let done = DispatchSemaphore(value: 0)
+        Thread {
+            results = batch.run()
+            done.signal()
+        }.start()
+
         // Wait until the encoder has started writing its hidden output, so
         // this tests killing it and cleaning up after it. A cancel that lands
         // before it starts would pass without either.
-        let lock = NSLock()
-        var cancelledAt = Date.distantFuture
-        DispatchQueue.global().async {
-            let deadline = Date() + 10
-            while Date() < deadline, !((try? contents(of: folder)) ?? []).contains(where: { $0.hasPrefix(".") }) {
-                usleep(5_000)
-            }
-            lock.withLock { cancelledAt = Date() }
-            batch.cancellation.cancel()
+        let deadline = Date() + 10
+        while Date() < deadline, !(try contents(of: folder)).contains(where: { $0.hasPrefix(".") }) {
+            usleep(2_000)
         }
+        let cancelledAt = Date()
+        batch.cancellation.cancel()
+        done.wait()
 
-        let results = batch.run()
-
-        // A full encode of five minutes takes several seconds, so returning
-        // this soon means the encoder was killed, not waited out.
-        #expect(Date().timeIntervalSince(lock.withLock { cancelledAt }) < 1, "the encoder kept running after the cancel")
+        // A full encode of five minutes takes seconds, so returning this soon
+        // means the encoder was killed, not waited out.
+        #expect(Date().timeIntervalSince(cancelledAt) < 1, "the encoder kept running after the cancel")
         #expect(results.count == 1)
         if case .failure(.cancelled) = results[0] {} else { Issue.record("expected a cancel, got \(results[0])") }
         #expect(try contents(of: folder) == ["long.wav"])
