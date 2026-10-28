@@ -254,7 +254,7 @@ func awkwardFileNamesConvert(tools: Tools) throws {
 @Test(arguments: engines)
 func cancellingMidConversionLeavesNothingBehind(tools: Tools) throws {
     try withFolder { folder in
-        let source = try tone("long.wav", in: folder, seconds: 180)
+        let source = try tone("long.wav", in: folder, seconds: 300)
         let format: Format = tools.ffmpeg == nil ? .aac : .mp3
         let batch = Batch(files: [source], format: format, converter: Converter(tools: tools))
         // Wait until the encoder has started writing its hidden output, so
@@ -273,9 +273,9 @@ func cancellingMidConversionLeavesNothingBehind(tools: Tools) throws {
 
         let results = batch.run()
 
-        // A full encode of three minutes takes two seconds or more, so
-        // returning this soon means the encoder was killed, not waited out.
-        #expect(Date().timeIntervalSince(lock.withLock { cancelledAt }) < 0.5, "the encoder kept running after the cancel")
+        // A full encode of five minutes takes several seconds, so returning
+        // this soon means the encoder was killed, not waited out.
+        #expect(Date().timeIntervalSince(lock.withLock { cancelledAt }) < 1, "the encoder kept running after the cancel")
         #expect(results.count == 1)
         if case .failure(.cancelled) = results[0] {} else { Issue.record("expected a cancel, got \(results[0])") }
         #expect(try contents(of: folder) == ["long.wav"])
@@ -361,7 +361,7 @@ func ffmpegReadsFilesCoreAudioCant() throws {
             lock.withLock { counts.append(n) }
         }
 
-        #expect(counts.sorted() == Array(1...7))
+        #expect(counts == Array(1...7))
         #expect(results.filter { (try? $0.get()) != nil }.count == 6)
         #expect(Batch.summary(results, format: .flac) == "6 converted\n1 already FLAC")
     }

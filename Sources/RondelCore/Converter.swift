@@ -125,7 +125,7 @@ public struct Converter: Sendable {
 
     private func moveIntoPlace(_ temp: URL, source: URL, format: Format) throws -> URL {
         guard FileManager.default.fileExists(atPath: temp.path) else {
-            throw ConversionError.toolFailed("the converter finished without writing anything")
+            throw ConversionError.toolFailed("The converter finished without writing anything.")
         }
         let folder = source.deletingLastPathComponent()
         for attempt in 1... {
@@ -146,10 +146,10 @@ public struct Converter: Sendable {
                     try FileManager.default.moveItem(at: temp, to: destination)
                     return destination
                 } catch {
-                    throw ConversionError.toolFailed("couldn't save the result: \(error.localizedDescription)")
+                    throw ConversionError.toolFailed("Couldn't save the result: \(error.localizedDescription)")
                 }
             default:
-                throw ConversionError.toolFailed("couldn't save the result: \(String(cString: strerror(errno)))")
+                throw ConversionError.toolFailed("Couldn't save the result: \(String(cString: strerror(errno))).")
             }
         }
         fatalError("unreachable")
@@ -225,7 +225,9 @@ public final class Cancellation: @unchecked Sendable {
             cancelled = true
             return running
         }
-        processes.forEach { $0.terminate() }
+        // SIGKILL, not the SIGTERM terminate() sends: on SIGTERM ffmpeg stops
+        // to finish the file properly, and that file is about to be deleted.
+        processes.forEach { kill($0.processIdentifier, SIGKILL) }
     }
 
     /// Starts the process unless the batch is already cancelled. Starting it
@@ -251,6 +253,14 @@ struct Audio {
     let bits: Int
     let channels: Int
 
+    private static let codecs: [AudioFormatID: Format] = [
+        kAudioFormatMPEGLayer3: .mp3,
+        kAudioFormatMPEG4AAC: .aac, kAudioFormatMPEG4AAC_HE: .aac, kAudioFormatMPEG4AAC_HE_V2: .aac,
+        kAudioFormatAppleLossless: .alac,
+        kAudioFormatFLAC: .flac,
+        kAudioFormatOpus: .opus,
+    ]
+
     /// The bit depth to write PCM at: the source's own, rounded up to one
     /// WAV and AIFF both support.
     var pcmBits: Int { bits <= 16 ? 16 : bits <= 24 ? 24 : 32 }
@@ -262,31 +272,20 @@ struct Audio {
         let ext = url.pathExtension.lowercased()
         channels = Int(description.mChannelsPerFrame)
 
-        let codec: Format?
+        var codec = Audio.codecs[description.mFormatID]
         switch description.mFormatID {
         case kAudioFormatLinearPCM:
             // Floating-point sources come out as 24-bit integers, which AIFF
             // can hold and which keeps more detail than anyone can hear.
             let isFloat = description.mFormatFlags & kAudioFormatFlagIsFloat != 0
             bits = isFloat ? 24 : Int(description.mBitsPerChannel)
-            codec = [.wav, .aiff].contains(Format(fileExtension: ext)) ? Format(fileExtension: ext) : nil
+            codec = Format(fileExtension: ext).flatMap { $0 == .wav || $0 == .aiff ? $0 : nil }
         case kAudioFormatAppleLossless, kAudioFormatFLAC:
             // Lossless codecs record the original bit depth in the format
             // flags. mBitsPerChannel is zero for them.
             bits = [1: 16, 2: 20, 3: 24, 4: 32][description.mFormatFlags] ?? 16
-            codec = description.mFormatID == kAudioFormatFLAC ? .flac : .alac
-        case kAudioFormatMPEG4AAC, kAudioFormatMPEG4AAC_HE, kAudioFormatMPEG4AAC_HE_V2:
-            bits = 16
-            codec = .aac
-        case kAudioFormatMPEGLayer3:
-            bits = 16
-            codec = .mp3
-        case kAudioFormatOpus:
-            bits = 16
-            codec = .opus
         default:
-            bits = 16
-            codec = nil
+            bits = 16  // anything lossy decodes to 16-bit when written as PCM
         }
         // FLAC inside an .m4a, or AAC in a .caf, isn't what anyone means by
         // "already FLAC": converting it still gives them the file they want.

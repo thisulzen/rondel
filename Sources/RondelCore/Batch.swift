@@ -29,12 +29,13 @@ public final class Batch: @unchecked Sendable {
             } catch {
                 result = .failure(.toolFailed(error.localizedDescription))
             }
-            let finished = lock.withLock {
+            // Reporting under the lock keeps the counts in order, so the
+            // wheel never goes from "3 of 5" back to "2 of 5".
+            lock.withLock {
                 results[i] = result
                 done += 1
-                return done
+                progress(done)
             }
-            progress(finished)
         }
         return results.map { $0! }
     }
