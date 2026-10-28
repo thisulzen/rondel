@@ -1,0 +1,46 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      # With ffmpeg installed every converter test runs twice, once per
+      # engine. Without it only the Core Audio half would be checked.
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+
+      - name: Versions
+        run: |
+          sw_vers
+          swift --version
+          ffmpeg -version | head -1
+
+      - name: Test
+        run: swift test
+
+      - name: Build the app and check what Finder will read from it
+        run: |
+          make app
+          plutil -lint build/Rondel.app/Contents/Info.plist
+          /System/Library/CoreServices/pbs -read_bundle build/Rondel.app 2>&1 | tee services.txt
+          grep -q 'convertAudio' services.txt
+
+      - name: Convert a file with the built app
+        run: |
+          say -o voice.aiff "Built and converted in CI."
+          build/Rondel.app/Contents/MacOS/Rondel --to flac voice.aiff
+          build/Rondel.app/Contents/MacOS/Rondel --to mp3 voice.flac
+          afinfo voice.mp3 | grep 'Data format'
