@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v13)],
     targets: [
         .target(name: "RondelCore"),
+        .executableTarget(name: "Rondel", dependencies: ["RondelCore"]),
         .testTarget(name: "RondelCoreTests", dependencies: ["RondelCore"]),
     ],
     // The converter shares a little state between threads behind a lock, and

@@ -23,6 +23,7 @@ public struct Converter: Sendable {
     /// Returns the URL of the new file. Throws ConversionError.
     public func convert(_ source: URL, to format: Format, cancellation: Cancellation = Cancellation()) throws -> URL {
         if cancellation.isCancelled { throw ConversionError.cancelled }
+        guard FileManager.default.fileExists(atPath: source.path) else { throw ConversionError.notFound }
         let audio = Audio(source)
         if audio?.format == format { throw ConversionError.alreadyThatFormat(format) }
 
@@ -30,7 +31,9 @@ public struct Converter: Sendable {
         guard FileManager.default.isWritableFile(atPath: folder.path) else {
             throw ConversionError.folderNotWritable(folder.path)
         }
-        let stem = source.deletingPathExtension().lastPathComponent
+        // The stem is cut short so a name already near the 255-byte limit
+        // doesn't go over it once the temporary suffix is added.
+        let stem = source.deletingPathExtension().lastPathComponent.prefix(80)
         let temp = folder.appendingPathComponent(".\(stem).\(UUID().uuidString.prefix(8)).rondel.\(format.fileExtension)")
         // Once the rename succeeds there's nothing here to remove; until
         // then, this is what cleans up after a failure or a cancel.
@@ -155,6 +158,7 @@ public struct Converter: Sendable {
 
 public enum ConversionError: LocalizedError, Equatable, Sendable {
     case alreadyThatFormat(Format)
+    case notFound
     case needsFFmpeg(Format)
     case unreadable
     case folderNotWritable(String)
@@ -165,6 +169,8 @@ public enum ConversionError: LocalizedError, Equatable, Sendable {
         switch self {
         case .alreadyThatFormat(let format):
             "It's already \(format.name)."
+        case .notFound:
+            "The file isn't there any more. It may have been moved or deleted."
         case .needsFFmpeg(let format):
             "\(format.name) needs ffmpeg, which isn't installed. Install it with: brew install ffmpeg"
         case .unreadable:

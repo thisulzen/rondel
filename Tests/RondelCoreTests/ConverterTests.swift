@@ -207,6 +207,25 @@ func somethingThatIsntAudioFailsAndLeavesNothingBehind(tools: Tools) throws {
     }
 }
 
+@Test func aFileThatHasGoneMissingSaysSo() throws {
+    // Between the right-click and the choice of format, the file can be moved.
+    try withFolder { folder in
+        #expect(throws: ConversionError.notFound) {
+            try Converter(tools: installed).convert(folder.appendingPathComponent("gone.wav"), to: .flac)
+        }
+    }
+}
+
+@Test(arguments: engines)
+func aVeryLongNameStillConverts(tools: Tools) throws {
+    try withFolder { folder in
+        let name = String(repeating: "long name ", count: 24) + ".wav"  // 244 bytes, near the 255 limit
+        let source = try tone(name, in: folder)
+        let output = try Converter(tools: tools).convert(source, to: .flac)
+        #expect(output.lastPathComponent == String(repeating: "long name ", count: 24) + ".flac")
+    }
+}
+
 @Test(arguments: engines)
 func aFolderThatCantBeWrittenToIsReportedBeforeConverting(tools: Tools) throws {
     try withFolder { folder in
