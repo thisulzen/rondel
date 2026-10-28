@@ -26,7 +26,7 @@ make uninstall
 
 ## Using it
 
-Select one or more audio files in Finder, right-click, and choose **Convert Audio…**. It's near the bottom of the menu, or inside **Services** if you have several. The wheel opens where you clicked.
+Select one or more audio files in Finder, right-click, and choose Convert Audio…. It's near the bottom of the menu, or inside Services if you have several. The wheel opens where you clicked.
 
 - Hover over a format to see what it's for, then click it. The middle of the wheel counts the files as they finish, then shows a summary and closes.
 - Formats that can't be used show in grey, and hovering over one says why. MP3 and Opus need ffmpeg, and a format every selected file is already in is greyed out too.
@@ -35,7 +35,7 @@ Select one or more audio files in Finder, right-click, and choose **Convert Audi
 
 Each converted file is saved beside its original under the same name with the new extension. If that name is taken, it becomes `song 2.mp3`, then `song 3.mp3`, the way Finder names copies. Nothing is ever overwritten, and the original is never touched. A file that's already in the chosen format is skipped. If anything fails, an alert lists which files failed and why.
 
-There are three other ways in: **Open With → Rondel**, dropping files on the app's icon, or opening the app by itself, which asks you to choose files.
+There are three other ways in: Open With → Rondel, dropping files on the app's icon, or opening the app by itself, which asks you to choose files.
 
 ### Formats
 
@@ -65,7 +65,7 @@ It prints each new file's path, skips files already in the format, and exits 1 i
 
 macOS sometimes needs a nudge to notice a new service. Try these in order:
 
-1. Open System Settings → Keyboard → Keyboard Shortcuts… → Services → Files and Folders, and tick **Convert Audio…**.
+1. Open System Settings → Keyboard → Keyboard Shortcuts… → Services → Files and Folders, and tick Convert Audio….
 2. Run `/System/Library/CoreServices/pbs -flush`, or log out and back in.
 
 The first time Rondel converts something in Desktop, Documents or Downloads, macOS asks whether it can access that folder. It needs to, because the new file is saved there.
@@ -74,7 +74,7 @@ The first time Rondel converts something in Desktop, Documents or Downloads, mac
 
 Done: the wheel, conversion to all seven formats with ffmpeg and five without, the Finder service, Open With, the command line, install and uninstall, and the tests. CI runs the tests on Apple Silicon, builds the app and converts a file with it.
 
-Not done: there are no settings, so the bitrates above are fixed. There's no signed download, so you build it yourself. Video files don't get the menu item. A single long file shows a spinner rather than a percentage. The rest is listed under "Not checked" and "Not done" below.
+Not done: there are no settings, so the bitrates above are fixed, and there's no signed download, so you build it yourself. The full list is at the end, along with what I haven't been able to check.
 
 ## Design
 
@@ -82,9 +82,9 @@ Not done: there are no settings, so the bitrates above are fixed. There's no sig
 
 ffmpeg does the converting if it's installed, and Core Audio's `afconvert` does it if it isn't.
 
-I started with `afconvert` alone, because it ships with every Mac and uses Apple's encoders. Then I converted a tagged FLAC to AAC and the title and artist were gone. A converter that strips the tags off a music library isn't fit for purpose, and Core Audio can't write MP3 or Opus anyway. So ffmpeg comes first. `afconvert` stays as the fallback, so a Mac with nothing installed still gets five formats, and the wheel says what's missing rather than failing.
+I started with `afconvert` alone, because it ships with every Mac and uses Apple's encoders. Then I converted a tagged FLAC to AAC and the title and artist were gone. A converter that strips the tags off a music library isn't fit for purpose, and Core Audio can't write MP3 or Opus anyway. So ffmpeg comes first. `afconvert` stays as the fallback, so a Mac with nothing installed still gets five formats, and the wheel greys out the other two and says what to install.
 
-The cost is two sets of arguments to keep in step, and every converter test runs once per engine. With ffmpeg, AAC comes from ffmpeg's own encoder rather than Apple's. That's the price of keeping the tags. Apple's encoder inside ffmpeg (`aac_at`) would be the next step, but not every ffmpeg build has it.
+The cost is two sets of arguments to keep in step, and every converter test runs once per engine. With ffmpeg installed, AAC comes from ffmpeg's own encoder, and Apple's goes unused. That's the price of keeping the tags. Apple's encoder inside ffmpeg (`aac_at`) would be the next step, but not every ffmpeg build has it.
 
 An app opened from Finder gets a PATH without Homebrew on it, so ffmpeg is looked for in PATH first and then in `/opt/homebrew/bin`, `/usr/local/bin` and `/opt/local/bin`.
 
@@ -96,7 +96,7 @@ The rename uses `renamex_np` with `RENAME_EXCL`, which refuses to replace an exi
 
 ### Keeping the bit depth
 
-A 24-bit master converted to FLAC, ALAC, WAV or AIFF stays 24-bit, and a 16-bit file stays 16-bit. Core Audio reads the source's depth, which for ALAC and FLAC is hidden in the format flags rather than in the usual field, and the PCM formats are written at that depth. Lossy sources become 16-bit, and floating-point sources become 24-bit integers, because AIFF can't hold floats.
+A 24-bit master converted to FLAC, ALAC, WAV or AIFF stays 24-bit, and a 16-bit file stays 16-bit. Core Audio reads the source's depth, which for ALAC and FLAC is tucked away in the format flags while the usual field says zero, and the PCM formats are written at that depth. Lossy sources become 16-bit, and floating-point sources become 24-bit integers, because AIFF can't hold floats.
 
 ### Why a service and not a Finder extension
 
@@ -111,12 +111,11 @@ Most of these came from breaking something on purpose to see whether a test woul
 - The first version of the wheel drew as a plain grey disc on screen, with no labels at all. The frosted background was a subview of the wheel, and a subview always draws on top of its parent. The test that hovers over each slice and checks the slice turns blue caught it. The wheel now sits inside the background instead.
 - My first cancel test passed even after I deleted the line that kills the encoder. The batch still came back "cancelled", just a few seconds later, once the encoder had finished on its own. The test now checks it returns within half a second of the cancel. A full three-minute encode took 2.1 s for MP3 and 3.6 s for AAC on this laptop.
 - With that fixed, it still passed after I deleted the cleanup of half-written files. The cancel landed before the encoder had created its output, so there was nothing to clean up. The test now waits until the hidden file exists before cancelling.
-- `afconvert` drops tags, as above. That's why ffmpeg is the main engine.
 - A file name close to macOS's 255-byte limit broke once the hidden file's suffix was added. The temporary name now uses a shortened stem.
 
 ## What's tested
 
-There are 41 tests, run with `swift test` or `make test`. The test audio is generated as they run: sine tones written with Core Audio, and speech from the Mac's `say` command.
+There are 40 tests, run with `swift test` or `make test`, plus one that only draws the wheel to PNG files for a person to look at, when `RONDEL_SNAPSHOTS` names a folder. The test audio is generated as they run: sine tones written with Core Audio, and speech from the Mac's `say` command.
 
 - `FormatTests` covers output names, which slices are greyed out and why, and the wheel's geometry: which slice is under a point, going clockwise from twelve o'clock, and the dead zones in the middle and outside the ring.
 - `ConverterTests` runs the real tools on real files, once with Core Audio only and once with ffmpeg if it's installed. It checks that:
@@ -134,7 +133,7 @@ There are 41 tests, run with `swift test` or `make test`. The test audio is gene
 
 ### Not checked
 
-- I haven't clicked Convert Audio… in Finder myself. Installing into `~/Applications` was outside what I'd set out to touch on this Mac, and macOS doesn't let a script click a window without Accessibility permission. What is checked is that `pbs -read_bundle` reads the service from the built app, that the app shows the wheel at the pointer when it's given files, and that everything after the click works.
+- I haven't clicked Convert Audio… in Finder myself. I built and tested the app without installing it, and macOS won't let a script click a window without Accessibility permission. What is checked: `pbs -read_bundle` reads the service from the built app, the app opens the wheel at the pointer when it's given files, and in the tests everything from the click onwards works.
 - The folder-access prompt for Desktop, Documents and Downloads hasn't been seen, for the same reason.
 - `renamex_np` falling back on exFAT and SMB drives hasn't been run.
 - Built and run on macOS 15.7 on an Intel Mac, and tested on Apple Silicon in CI. Not tried on macOS 13 or 14.

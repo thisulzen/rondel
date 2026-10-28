@@ -130,9 +130,9 @@ public struct Converter: Sendable {
         let folder = source.deletingLastPathComponent()
         for attempt in 1... {
             let destination = folder.appendingPathComponent(outputName(for: source, format: format, attempt: attempt))
-            // RENAME_EXCL makes the rename fail rather than replace a file that
-            // exists, in one step, so two conversions finishing together can't
-            // both take "song.mp3".
+            // With RENAME_EXCL the rename fails if the name is taken, and the
+            // check and the rename are one step, so two conversions finishing
+            // together can't both take "song.mp3".
             if renamex_np(temp.path, destination.path, UInt32(RENAME_EXCL)) == 0 { return destination }
             switch errno {
             case EEXIST:
@@ -273,7 +273,7 @@ struct Audio {
             codec = [.wav, .aiff].contains(Format(fileExtension: ext)) ? Format(fileExtension: ext) : nil
         case kAudioFormatAppleLossless, kAudioFormatFLAC:
             // Lossless codecs record the original bit depth in the format
-            // flags rather than in mBitsPerChannel, which is zero.
+            // flags. mBitsPerChannel is zero for them.
             bits = [1: 16, 2: 20, 3: 24, 4: 32][description.mFormatFlags] ?? 16
             codec = description.mFormatID == kAudioFormatFLAC ? .flac : .alac
         case kAudioFormatMPEG4AAC, kAudioFormatMPEG4AAC_HE, kAudioFormatMPEG4AAC_HE_V2:

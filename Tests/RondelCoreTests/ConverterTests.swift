@@ -36,7 +36,7 @@ func tone(_ name: String, in folder: URL, seconds: Double = 1, rate: Double = 44
     ]
     let file = try AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
     // 440 whole cycles fit in a second, so one second written over and over
-    // is a seamless tone and long files don't need the memory to match.
+    // joins up without a click, and long files don't need the memory to match.
     let frames = AVAudioFrameCount(rate)
     let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frames)!
     buffer.frameLength = frames
@@ -258,8 +258,8 @@ func cancellingMidConversionLeavesNothingBehind(tools: Tools) throws {
         let format: Format = tools.ffmpeg == nil ? .aac : .mp3
         let batch = Batch(files: [source], format: format, converter: Converter(tools: tools))
         // Wait until the encoder has started writing its hidden output, so
-        // this tests killing it and cleaning up after it, rather than
-        // stopping it before it begins.
+        // this tests killing it and cleaning up after it. A cancel that lands
+        // before it starts would pass without either.
         let lock = NSLock()
         var cancelledAt = Date.distantFuture
         DispatchQueue.global().async {
