@@ -50,3 +50,23 @@ func speech(_ name: String, in folder: URL) throws -> URL {
     say.waitUntilExit()
     return url
 }
+
+@MainActor @Test func theServiceReadsEveryFileFinderSends() {
+    let pasteboard = NSPasteboard(name: NSPasteboard.Name("rondel-test-\(UUID().uuidString)"))
+    defer { pasteboard.releaseGlobally() }
+    let files = [URL(fileURLWithPath: "/music/one.wav"), URL(fileURLWithPath: "/music/two & three.flac")]
+
+    pasteboard.clearContents()
+    pasteboard.writeObjects(files as [NSURL])
+    #expect(AppDelegate.files(on: pasteboard) == files)
+
+    // The older form: a property list of paths.
+    pasteboard.clearContents()
+    pasteboard.setPropertyList(files.map(\.path), forType: NSPasteboard.PasteboardType("NSFilenamesPboardType"))
+    #expect(AppDelegate.files(on: pasteboard) == files)
+
+    // A web link isn't a file and is ignored.
+    pasteboard.clearContents()
+    pasteboard.writeObjects([URL(string: "https://example.com/song.mp3")! as NSURL])
+    #expect(AppDelegate.files(on: pasteboard).isEmpty)
+}

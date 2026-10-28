@@ -33,12 +33,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The Convert Audio… item in Finder's right-click menu. The name has to
     /// match NSMessage in Info.plist.
     @objc func convertAudio(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        let urls = Self.files(on: pasteboard)
         if urls.isEmpty {
             error.pointee = "No files were selected." as NSString
         } else {
             show(urls)
         }
+    }
+
+    /// Reading NSURL objects covers both the file URLs Finder sends today
+    /// and the list of paths older apps still put on the pasteboard.
+    static func files(on pasteboard: NSPasteboard) -> [URL] {
+        pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
     }
 
     private func show(_ files: [URL]) {
